@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="description" content="CS4406 Computer Graphics - Assignment #2" />
+    <meta charset="utf-8" />
+    <title>Learning Journal Unit 4</title>
+    <style>
+        /* Add styling for the legend */
+        #legend {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent background */
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+<div id="container" style="position: relative;"></div>
+
+<!-- Legend that explains controls -->
+<div id="legend">
+    <strong>Controls:</strong><br>
+    <ul>
+        <li><strong>Arrow keys</strong>: Rotate the object</li>
+        <li><strong>Left mouse</strong>: Rotate the scene</li>
+        <li><strong>Right mouse</strong>: Pan the scene</li>
+        <li><strong>Mouse wheel</strong>: Zoom in/out</li>
+        <li><strong>Spacebar</strong>: Toggle automatic rotation&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</li>
+    </ul>
+</div>
+
+<!-- External library imports -->
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.94.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.94.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+    // Create a new Three.js scene
+    var scene = new THREE.Scene();
+
+    // Set up the camera with a perspective projection
+    var camera = new THREE.PerspectiveCamera(45, 1, 1, 1000);
+    camera.position.set(5, 5, 10); // Position the camera at (5, 5, 10)
+    camera.lookAt(new THREE.Vector3(1, 1, 1)); // Look at the tetrahedron
+
+    // Initialize the renderer and add it to the DOM
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(800, 800); // Set the rendering size
+    renderer.setClearColor(0x000000); // Set background color to black
+    renderer.shadowMap.enabled = true; // Enable shadow mapping
+    document.getElementById('container').appendChild(renderer.domElement);
+
+    // Load textures and configure them
+    var loader = new THREE.TextureLoader();
+    var textures = ['firetruck.png', 'unicorn.png', 'teddybear.png', 'clock.png'].map((src, i) => {
+        return loader.load(src, (texture) => {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping; // Repeat texture in both directions
+
+            // Adjust texture parameters based on index
+            switch (i) {
+                case 0:
+                    texture.repeat.set(3.1, 3.1);
+                    texture.offset.set(0.58, -0.25);
+                    break;
+                case 1:
+                    texture.repeat.set(5, 5);
+                    texture.offset.set(0.4, 0.5);
+                    break;
+                case 2:
+                    texture.repeat.set(6, 6);
+                    break;
+                case 3:
+                    texture.repeat.set(2, 2);
+                    texture.offset.set(-0.25, -0.05);
+                    texture.center.set(0.5, 0.5);
+                    texture.rotation = Math.PI; // Rotate texture 180 degrees
+                    break;
+                default:
+                    break;
+            }
+        });
+    });
+
+    // Create materials using the loaded textures
+    var materials = textures.map(texture => new THREE.MeshPhongMaterial({ map: texture }));
+
+    // Generate geometry for the tetrahedron
+    var geometry = new THREE.BufferGeometry().fromGeometry(new THREE.TetrahedronGeometry(1));
+
+    // Define face groups for applying different materials
+    geometry.clearGroups();
+    [0, 1, 2, 3].forEach((g, i) => {
+        geometry.addGroup(i * 3, 3, i); // Each face is a group of 3 vertices
+    });
+
+    // Create the tetrahedron mesh
+    var tetrahedron = new THREE.Mesh(geometry, materials);
+    tetrahedron.position.set(1, 1, 1); // Position the tetrahedron
+
+    // Align the "clock" face so it initially faces the camera
+    var initialCameraDirection = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    tetrahedron.quaternion.setFromUnitVectors(new THREE.Vector3(1, 1, 1).normalize(), initialCameraDirection);
+
+    // Add the tetrahedron to the scene
+    scene.add(tetrahedron);
+
+    // Add a grid helper to visualize the ground plane (size: 20 units, divisions: 20)
+    var gridHelper = new THREE.GridHelper(8, 8);
+    scene.add(gridHelper);
+
+    // Set up scene lighting
+    var lights = [
+        new THREE.PointLight(0xFFFFFF, 1), // First point light
+        new THREE.PointLight(0xFFFFFF, 1), // Second point light
+        new THREE.AmbientLight(0x404040)   // Ambient light for subtle illumination
+    ];
+
+    // Position the point lights
+    lights[0].position.set(-5, 5, 10);
+    lights[1].position.set(5, -5, -10);
+
+    // Add lights to the scene
+    lights.forEach(light => scene.add(light));
+
+    // Initialize orbit controls for camera interaction
+    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableZoom = true; // Enable zooming
+    controls.enableKeys = false; // Disable default key controls - we'll be assigning our own listeners
+    controls.target.copy(tetrahedron.position); // Focus orbit controls on the tetrahedron rather than the origin
+    controls.update();
+
+    // Variables to control rotation behavior
+    var rotationSpeed = 0.02; // Base rotation speed
+    var rotateDir = 0; // Direction of horizontal rotation (-1, 0, 1)
+    var rotateUpDownDir = 0; // Direction of vertical rotation (-1, 0, 1)
+    var autoRotate = true; // Flag for automatic rotation (this gets turned off after manual rotation)
+
+    // Event listener for keydown events to control rotation
+    document.addEventListener('keydown', (event) => {
+        switch (event.key) {
+            case 'ArrowRight':
+                rotateDir = 1;
+                autoRotate = false;
+                break;
+            case 'ArrowLeft':
+                rotateDir = -1;
+                autoRotate = false;
+                break;
+            case 'ArrowUp':
+                rotateUpDownDir = -1;
+                autoRotate = false;
+                break;
+            case 'ArrowDown':
+                rotateUpDownDir = 1;
+                autoRotate = false;
+                break;
+            case ' ': // Spacebar pressed
+                autoRotate = !autoRotate; // Toggle automatic rotation
+                break;
+            default:
+                break;
+        }
+        event.preventDefault(); // Prevent default arrow key behavior which might scroll the HTML page
+    });
+
+    // Event listener for keyup events to reset rotation directions
+    document.addEventListener('keyup', (event) => {
+        if (['ArrowRight', 'ArrowLeft'].includes(event.key)) {
+            rotateDir = 0;
+        }
+        if (['ArrowUp', 'ArrowDown'].includes(event.key)) {
+            rotateUpDownDir = 0;
+        }
+    });
+
+    // Animation loop to render the scene and update objects
+    function animate() {
+        requestAnimationFrame(animate); // Request the next animation frame
+
+        // Get the camera's current direction vector
+        var camDir = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3())).normalize();
+
+        // Apply rotations to the tetrahedron based on input
+        if (autoRotate) {
+            // Rotate around the camera's viewing direction
+            tetrahedron.rotateOnWorldAxis(camDir, rotationSpeed);
+        }
+        if (rotateDir) {
+            // Rotate around the Y-axis relative to the camera
+            var yAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+            tetrahedron.rotateOnWorldAxis(yAxis, rotateDir * rotationSpeed);
+        }
+        if (rotateUpDownDir) {
+            // Rotate around the X-axis relative to the camera
+            var xAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            tetrahedron.rotateOnWorldAxis(xAxis, rotateUpDownDir * rotationSpeed);
+        }
+
+        controls.update(); // Update the orbit controls
+        renderer.render(scene, camera); // Render the scene
+    }
+
+    // Start the animation loop
+    animate();
+</script>
+
+</body>
+</html>
